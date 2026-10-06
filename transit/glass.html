@@ -1,1 +1,422 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<style>
+  body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+  #container { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  #stage-bg { position: absolute; inset: 0; transform-origin: center; }
+  #effect-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+  @keyframes neonPulse { 0% { filter: drop-shadow(0 0 5px var(--neon-color)); } 50% { filter: drop-shadow(0 0 var(--neon-intensity) var(--neon-color)); } 100% { filter: drop-shadow(0 0 5px var(--neon-color)); } }
+  .effect-neon { animation: neonPulse 2s infinite ease-in-out; }
+</style>
+</head>
+<body>
+  <svg style="display:none;">
+    <defs>
+      <filter id="water-filter"><feTurbulence id="water-turb" type="fractalNoise" baseFrequency="0.01" numOctaves="2" result="turbulence"/><feDisplacementMap id="water-disp" in="SourceGraphic" in2="turbulence" scale="0" xChannelSelector="R" yChannelSelector="G"/></filter>
+      <filter id="portal-filter"><feTurbulence id="portal-turb" type="fractalNoise" baseFrequency="0.01" numOctaves="1" result="warp"/><feDisplacementMap id="portal-disp" in="SourceGraphic" in2="warp" scale="0" xChannelSelector="R" yChannelSelector="G"/></filter>
+    </defs>
+  </svg>
+  <div id="container">
+    <div id="stage-bg"></div>
+    <div id="effect-overlay"></div>
+  </div>
+  <script>
+    const State = {"bgSettings":{"type":"color","url":"","color":"#ebf0c6","pattern":"none","opacity":1},"effect":{"type":"shatteredMirror"},"params":{"watercolor":{"spreadIntensity":30,"edgeSoftness":2,"paperColor":"#f5f5dc","duration":2500},"brushStrokes":{"strokeCount":6,"thickness":100,"paintColor":"#ff6b6b","edgeRoughness":0.3,"duration":2000},"cherryBlossom":{"petalCount":120,"fallSpeed":2,"windStrength":1,"petalSize":20,"rotationIntensity":1,"duration":3000},"inkDrop":{"inkColor":"#000000","dropCount":5,"edgeRoughness":0.5,"startPosition":"random","duration":2500},"explosion":{"particles":80,"color":"#ffffff","duration":2000},"shatter":{"pieces":29,"duration":5000},"flash":{"duration":800},"neon":{"color":"#b14aff","intensity":20,"duration":3000},"water":{"intensity":50,"duration":2000},"glitch":{"duration":1500},"loading":{"color":"#00e5ff","speed":1,"duration":2500},"blackHole":{"rotationSpeed":2,"singularitySize":50,"diskColor":"#b14aff","particles":180,"duration":3000},"cubeUnfold":{"rotationSpeed":1.5,"direction":"right","perspective":800,"duration":2500},"portal":{"rotationSpeed":3,"expansionSpeed":2,"color":"#6a00ff","distortion":50,"duration":2500},"shatteredMirror":{"pieces":25,"fallSpeed":1.5,"rotationIntensity":1,"reflections":true,"duration":1700,"rotationSpeed":1,"speed":1.5}}};
+    const EffectRunner = { 
+      initBg: function(state, bgElementId) {
+        const bg = document.getElementById(bgElementId);
+        if(!bg) return;
+        const s = state.bgSettings;
+        bg.style.cssText = `position:absolute; inset:0; transform-origin:center; display:block; filter:none; transform:none; clip-path:none;`;
+        bg.style.opacity = s.opacity;
 
+        if (s.type === 'url' && s.url) {
+          bg.style.backgroundImage = `url('${s.url}')`;
+          bg.style.backgroundSize = 'cover';
+          bg.style.backgroundPosition = 'center';
+          bg.style.backgroundColor = 'transparent';
+        } else if (s.type === 'color' || s.type === 'pattern') {
+          bg.style.backgroundColor = s.color;
+          bg.style.backgroundImage = 'none';
+          if (s.type === 'pattern') {
+            if (s.pattern === 'grid') {
+              bg.style.backgroundImage = `linear-gradient(rgba(255,255,255,0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.2) 1px, transparent 1px)`;
+              bg.style.backgroundSize = '20px 20px';
+            } else if (s.pattern === 'dots') {
+              bg.style.backgroundImage = `radial-gradient(rgba(255,255,255,0.3) 2px, transparent 2px)`;
+              bg.style.backgroundSize = '20px 20px';
+            } else if (s.pattern === 'stripes') {
+              bg.style.backgroundImage = `repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.1) 10px, rgba(255,255,255,0.1) 20px)`;
+            } else if (s.pattern === 'checkerboard') {
+               bg.style.backgroundImage = `linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%, rgba(255,255,255,0.1)), linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%, rgba(255,255,255,0.1))`;
+               bg.style.backgroundPosition = `0 0, 10px 10px`;
+               bg.style.backgroundSize = `20px 20px`;
+            }
+          }
+        }
+      },
+      play: function(state, bgElementId, overlayElementId) {
+        this.initBg(state, bgElementId);
+        const bg = document.getElementById(bgElementId);
+        const overlay = document.getElementById(overlayElementId);
+        const type = state.effect.type;
+        const p = state.params[type];
+        const s = state.bgSettings;
+        const w = overlay.clientWidth, h = overlay.clientHeight;
+        
+        overlay.innerHTML = ''; overlay.style.perspective = 'none';
+        document.documentElement.style.setProperty('--neon-color', 'transparent');
+        document.documentElement.style.setProperty('--neon-intensity', '0px');
+
+        if (type === 'none' || (s.type === 'url' && !s.url)) return;
+
+        const bgStyleStr = `background-image: ${bg.style.backgroundImage}; background-color: ${bg.style.backgroundColor}; background-size: ${bg.style.backgroundSize || 'cover'}; background-position: ${bg.style.backgroundPosition || 'center'};`;
+
+        const setupCanvas = () => {
+          const cvs = document.createElement('canvas');
+          cvs.width = w; cvs.height = h;
+          cvs.style.cssText = `position:absolute; inset:0; pointer-events:none;`;
+          overlay.appendChild(cvs);
+          return { cvs, ctx: cvs.getContext('2d') };
+        };
+
+        if (type === 'watercolor') {
+          bg.style.display = 'none';
+          const uid = Date.now();
+          const isUrl = s.type === 'url' && s.url;
+          const bgContent = isUrl 
+            ? `<image href="${s.url}" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" mask="url(#wc-mask-${uid})" filter="url(#wc-filt-${uid})"/>`
+            : `<rect width="100%" height="100%" fill="${s.color}" mask="url(#wc-mask-${uid})" filter="url(#wc-filt-${uid})"/>`;
+
+          const svgHTML = `
+            <svg width="100%" height="100%" style="position:absolute; inset:0; background:${p.paperColor}; opacity:${s.opacity};">
+              <defs>
+                <filter id="wc-filt-${uid}">
+                  <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="3" result="n"/>
+                  <feDisplacementMap in="SourceGraphic" in2="n" scale="${p.spreadIntensity}" xChannelSelector="R" yChannelSelector="G"/>
+                  <feGaussianBlur stdDeviation="${p.edgeSoftness}"/>
+                </filter>
+                <mask id="wc-mask-${uid}"></mask>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#noise-pat)" opacity="0.1" style="mix-blend-mode:multiply;"/>
+              ${bgContent}
+            </svg>
+          `;
+          overlay.innerHTML = svgHTML;
+          const mask = overlay.querySelector(`mask`);
+          for(let i=0; i<6; i++) {
+            let c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            c.setAttribute('cx', Math.random()*w); c.setAttribute('cy', Math.random()*h);
+            c.setAttribute('fill', 'white');
+            mask.appendChild(c);
+            let maxR = Math.max(w, h) * 0.8;
+            c.animate([{r:0}, {r:maxR}], {duration: p.duration, delay: Math.random()*(p.duration*0.3), fill:'forwards', easing:'ease-in-out'});
+          }
+        }
+        else if (type === 'brushStrokes') {
+          const uid = Date.now();
+          const svgHTML = `
+            <svg width="100%" height="100%" style="position:absolute; inset:0;">
+              <defs>
+                <filter id="brush-edge-${uid}">
+                  <feTurbulence type="fractalNoise" baseFrequency="${0.1 - p.edgeRoughness*0.08}" numOctaves="2" result="n"/>
+                  <feDisplacementMap in="SourceGraphic" in2="n" scale="${p.edgeRoughness*50}" xChannelSelector="R" yChannelSelector="G"/>
+                </filter>
+              </defs>
+              <g id="stroke-container-${uid}" filter="url(#brush-edge-${uid})"></g>
+            </svg>
+          `;
+          overlay.innerHTML = svgHTML;
+          const container = overlay.querySelector(`#stroke-container-${uid}`);
+          for(let i=0; i<p.strokeCount; i++) {
+            let y = (h / p.strokeCount) * i + (Math.random()*50);
+            let d = `M -100 ${y} Q ${w/2} ${y + (Math.random()-0.5)*300} ${w+100} ${y + (Math.random()-0.5)*100}`;
+            let shadow = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            shadow.setAttribute('d', d); shadow.setAttribute('stroke', p.paintColor); shadow.setAttribute('stroke-width', p.thickness * 1.2);
+            shadow.setAttribute('fill', 'none'); shadow.setAttribute('stroke-linecap', 'round'); shadow.setAttribute('opacity', '0.4');
+            let path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', d); path.setAttribute('stroke', p.paintColor); path.setAttribute('stroke-width', p.thickness);
+            path.setAttribute('fill', 'none'); path.setAttribute('stroke-linecap', 'round');
+            container.appendChild(shadow); container.appendChild(path);
+            let len = w * 1.5; 
+            [shadow, path].forEach(el => {
+              el.setAttribute('stroke-dasharray', len); el.setAttribute('stroke-dashoffset', len);
+              el.animate([{strokeDashoffset: len}, {strokeDashoffset: 0}], { duration: p.duration * 0.7, delay: i * (p.duration * 0.3 / p.strokeCount), fill: 'forwards', easing: 'ease-in-out' });
+            });
+          }
+          bg.animate([{opacity: s.opacity}, {opacity:0}], {duration: p.duration, fill:'forwards'});
+        }
+        else if (type === 'cherryBlossom') {
+          const { cvs, ctx } = setupCanvas();
+          let petals = Array.from({length: p.petalCount}).map(() => ({
+            x: Math.random()*w, y: Math.random()*h - h, 
+            size: Math.random()*(p.petalSize-10) + 10, speedY: Math.random()*(p.fallSpeed) + p.fallSpeed, speedX: Math.random() - 0.5,
+            rot: Math.random()*Math.PI*2, rotSpeed: (Math.random()-0.5) * 0.1 * p.rotationIntensity, osc: Math.random()*Math.PI*2, oscSpeed: Math.random()*0.05
+          }));
+          bg.animate([{opacity: s.opacity}, {opacity: 0}], {duration: p.duration, fill: 'forwards'});
+          let start = performance.now();
+          function drawPetals(t) {
+            ctx.clearRect(0, 0, w, h); let alive = false;
+            petals.forEach(pObj => {
+              pObj.y += pObj.speedY; pObj.osc += pObj.oscSpeed; pObj.x += pObj.speedX + Math.sin(pObj.osc)*2 + p.windStrength; pObj.rot += pObj.rotSpeed;
+              if (pObj.y < h + 50) alive = true;
+              ctx.save(); ctx.translate(pObj.x, pObj.y); ctx.rotate(pObj.rot);
+              ctx.beginPath(); ctx.moveTo(0, -pObj.size/2); ctx.bezierCurveTo(pObj.size/2, -pObj.size/4, pObj.size/2, pObj.size/2, 0, pObj.size/2);
+              ctx.bezierCurveTo(-pObj.size/2, pObj.size/2, -pObj.size/2, -pObj.size/4, 0, -pObj.size/2);
+              let grad = ctx.createLinearGradient(0, -pObj.size/2, 0, pObj.size/2);
+              grad.addColorStop(0, '#ffb7c5'); grad.addColorStop(1, 'rgba(255,255,255,0.8)');
+              ctx.fillStyle = grad; ctx.fill(); ctx.restore();
+            });
+            if (alive && (t - start) < p.duration * 1.5) requestAnimationFrame(drawPetals);
+          }
+          requestAnimationFrame(drawPetals);
+        }
+        else if (type === 'inkDrop') {
+          const uid = Date.now();
+          const svgHTML = `
+            <svg width="100%" height="100%" style="position:absolute; inset:0; pointer-events:none;">
+              <defs>
+                <filter id="ink-edge-${uid}">
+                  <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" result="n"/>
+                  <feDisplacementMap in="SourceGraphic" in2="n" scale="${p.edgeRoughness * 100}" xChannelSelector="R" yChannelSelector="G"/>
+                </filter>
+                <radialGradient id="ink-grad-${uid}">
+                  <stop offset="60%" stop-color="${p.inkColor}" stop-opacity="1"/>
+                  <stop offset="100%" stop-color="${p.inkColor}" stop-opacity="0.8"/>
+                </radialGradient>
+              </defs>
+              <g id="ink-container-${uid}" filter="url(#ink-edge-${uid})"></g>
+            </svg>
+          `;
+          overlay.innerHTML = svgHTML;
+          const container = overlay.querySelector(`#ink-container-${uid}`);
+          for(let i=0; i<p.dropCount; i++) {
+            let cx = p.startPosition === 'center' ? w/2 + (Math.random()-0.5)*100 : Math.random()*w;
+            let cy = p.startPosition === 'center' ? h/2 + (Math.random()-0.5)*100 : Math.random()*h;
+            let drop = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            drop.setAttribute('cx', cx); drop.setAttribute('cy', cy); drop.setAttribute('fill', `url(#ink-grad-${uid})`);
+            container.appendChild(drop);
+            let maxR = Math.max(w, h) * 1.5;
+            drop.animate([{ r: 0, opacity: 0.8 }, { r: maxR, opacity: 1 }], { duration: p.duration * 0.8, delay: i * (p.duration * 0.2 / p.dropCount), fill: 'forwards', easing: 'cubic-bezier(0.5, 0, 0.2, 1)' });
+          }
+        }
+        else if (type === 'explosion') {
+          const { cvs, ctx } = setupCanvas();
+          let particles = Array.from({length: p.particles}).map(() => ({ x: w/2, y: h/2, vx: (Math.random()-0.5)*20, vy: (Math.random()-0.5)*20, r: Math.random()*5+2, a: 1 }));
+          let start = performance.now();
+          bg.animate([{opacity: s.opacity}, {opacity: 0}], {duration: p.duration, fill: 'forwards'});
+          function render(t) {
+            ctx.clearRect(0, 0, w, h); let alive = false;
+            particles.forEach(pt => {
+              if (pt.a <= 0) return; alive = true;
+              pt.vy += 0.5; pt.x += pt.vx; pt.y += pt.vy; pt.a -= (16/p.duration);
+              ctx.globalAlpha = Math.max(0, pt.a); ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI*2); ctx.fill();
+            });
+            if (alive && (t - start) < p.duration) requestAnimationFrame(render);
+          }
+          requestAnimationFrame(render);
+        }
+        else if (type === 'shatter') {
+          bg.style.display = 'none';
+          const cols = Math.ceil(Math.sqrt(p.pieces)), rows = Math.ceil(p.pieces/cols);
+          const pw = w/cols, ph = h/rows;
+          for (let r=0; r<rows; r++) {
+            for (let c=0; c<cols; c++) {
+              if (r*cols+c >= p.pieces && p.pieces !== cols*rows) continue;
+              const piece = document.createElement('div');
+              piece.style.cssText = `position:absolute; left:${c*pw}px; top:${r*ph}px; width:${pw}px; height:${ph}px; ${bgStyleStr} background-size:${w}px ${h}px; background-position:-${c*pw}px -${r*ph}px; opacity: ${s.opacity};`;
+              overlay.appendChild(piece);
+              piece.animate([
+                { transform: 'translate3d(0,0,0) rotate3d(0,0,0,0deg)', opacity: s.opacity },
+                { transform: `translate3d(${(Math.random()-0.5)*500}px, ${(Math.random()-0.5)*500}px, ${(Math.random()-0.5)*500}px) rotate3d(1,1,1,${(Math.random()-0.5)*720}deg)`, opacity: 0 }
+              ], { duration: p.duration, easing: 'cubic-bezier(0.25,1,0.5,1)', fill: 'forwards' });
+            }
+          }
+        }
+        else if (type === 'flash') {
+          const flash = document.createElement('div');
+          flash.style.cssText = `position:absolute; inset:0; background:#fff; z-index:999;`;
+          overlay.appendChild(flash);
+          flash.animate([{opacity:1}, {opacity:0}], { duration: p.duration, easing:'ease-out', fill:'forwards' });
+        }
+        else if (type === 'neon') {
+          document.documentElement.style.setProperty('--neon-color', p.color);
+          document.documentElement.style.setProperty('--neon-intensity', `${p.intensity}px`);
+          bg.classList.add('effect-neon');
+          setTimeout(() => bg.classList.remove('effect-neon'), p.duration);
+        }
+        else if (type === 'water') {
+          bg.style.filter = 'url(#water-filter)';
+          const turb = document.getElementById('water-turb'), disp = document.getElementById('water-disp');
+          let start = performance.now();
+          function anim(t) {
+            let prog = Math.min((t - start) / p.duration, 1);
+            if(turb) turb.setAttribute('baseFrequency', 0.01 + prog * 0.05);
+            if(disp) disp.setAttribute('scale', prog * p.intensity);
+            bg.style.opacity = s.opacity * (1 - prog);
+            if (prog < 1) requestAnimationFrame(anim);
+          }
+          requestAnimationFrame(anim);
+        }
+        else if (type === 'glitch') {
+          bg.style.display = 'none';
+          const colors = ['rgba(255,0,0,1)', 'rgba(0,255,0,1)', 'rgba(0,0,255,1)'];
+          let layers = colors.map((col, i) => {
+            const l = document.createElement('div');
+            l.style.cssText = `position:absolute; inset:0; ${bgStyleStr} filter:drop-shadow(${i*5-5}px 0 0 ${col}); mix-blend-mode:screen; opacity:${s.opacity};`;
+            overlay.appendChild(l); return l;
+          });
+          let interval = setInterval(() => {
+            layers.forEach(l => {
+              const top = Math.random()*100, bottom = Math.random()*100;
+              l.style.clipPath = `inset(${top}% 0 ${100-bottom-top}% 0)`;
+              l.style.transform = `translateX(${(Math.random()-0.5)*20}px)`;
+            });
+          }, 50);
+          layers.forEach(l => l.animate([{opacity:s.opacity}, {opacity:0}], { duration: p.duration, fill:'forwards', easing:'ease-in' }));
+          setTimeout(() => clearInterval(interval), p.duration);
+        }
+        else if (type === 'loading') {
+          bg.animate([{opacity:s.opacity}, {opacity:0}], {duration: p.duration/2, fill:'forwards'});
+          const spinner = document.createElement('div');
+          spinner.style.cssText = `position:absolute; left:50%; top:50%; width:80px; height:80px; border:8px solid rgba(255,255,255,0.1); border-top-color:${p.color}; border-radius:50%; margin:-40px 0 0 -40px;`;
+          spinner.animate([{transform:'rotate(0deg)'}, {transform:'rotate(360deg)'}], {duration: 1000/p.speed, iterations: Infinity});
+          overlay.appendChild(spinner);
+          setTimeout(() => spinner.animate([{opacity:1}, {opacity:0}], {duration: 500, fill:'forwards'}), p.duration - 500);
+        }
+        else if (type === 'blackHole') {
+          const { cvs, ctx } = setupCanvas();
+          const cx = w/2, cy = h/2;
+          let particles = Array.from({length: p.particles}).map(() => ({ angle: Math.random()*Math.PI*2, dist: Math.random()*(Math.max(cx, cy)) + p.singularitySize, size: Math.random()*3+1 }));
+          let start = performance.now();
+          bg.animate([{opacity: s.opacity}, {opacity: 0, offset: 0.5}, {opacity: 0}], {duration: p.duration, fill: 'forwards'});
+          function drawBlackHole(t) {
+            let prog = Math.min((t - start) / p.duration, 1);
+            ctx.clearRect(0, 0, w, h);
+            ctx.beginPath(); ctx.arc(cx, cy, p.singularitySize + (Math.sin((t-start)*0.01)*5), 0, Math.PI*2);
+            ctx.shadowBlur = 30 + prog*50; ctx.shadowColor = p.diskColor; ctx.strokeStyle = p.diskColor; ctx.lineWidth = 5; ctx.stroke(); ctx.shadowBlur = 0; 
+            ctx.beginPath(); ctx.arc(cx, cy, p.singularitySize * 0.95, 0, Math.PI*2); ctx.fillStyle = '#000'; ctx.fill();
+            ctx.fillStyle = '#fff';
+            particles.forEach(pt => {
+              pt.dist -= (p.rotationSpeed * (cx/Math.max(pt.dist, 1))); 
+              pt.angle += (p.rotationSpeed * 0.05) * (cx/Math.max(pt.dist, 10));
+              let alpha = pt.dist < p.singularitySize ? 0 : Math.min(1, (pt.dist - p.singularitySize)/50);
+              if (alpha > 0) {
+                ctx.globalAlpha = alpha * (1 - prog);
+                ctx.beginPath(); ctx.arc(cx + Math.cos(pt.angle)*pt.dist, cy + Math.sin(pt.angle)*pt.dist, pt.size, 0, Math.PI*2); ctx.fill();
+              }
+            });
+            ctx.globalAlpha = 1;
+            if (prog < 1) requestAnimationFrame(drawBlackHole);
+          }
+          requestAnimationFrame(drawBlackHole);
+        }
+        else if (type === 'cubeUnfold') {
+          bg.style.display = 'none'; overlay.style.perspective = `${p.perspective}px`;
+          const size = Math.min(w, h) * 0.6, half = size / 2;
+          const box = document.createElement('div');
+          box.style.cssText = `position:absolute; width:${size}px; height:${size}px; left:50%; top:50%; margin-left:-${half}px; margin-top:-${half}px; transform-style:preserve-3d;`;
+          overlay.appendChild(box);
+          const faces = [{rx:0,ry:0,tz:half}, {rx:0,ry:180,tz:half}, {rx:0,ry:-90,tz:half}, {rx:0,ry:90,tz:half}, {rx:90,ry:0,tz:half}, {rx:-90,ry:0,tz:half}];
+          const faceElements = faces.map(f => {
+            const face = document.createElement('div');
+            face.style.cssText = `position:absolute; inset:0; ${bgStyleStr} opacity:${s.opacity}; transform:rotateX(${f.rx}deg) rotateY(${f.ry}deg) translateZ(${f.tz}px); backface-visibility:hidden; box-shadow: inset 0 0 50px rgba(0,0,0,0.5);`;
+            box.appendChild(face); return { el: face, ...f };
+          });
+          box.animate([{ transform: `rotateX(0deg) rotateY(0deg)` }, { transform: `rotateX(${360*p.rotationSpeed}deg) rotateY(${360*p.rotationSpeed}deg)` }], { duration: p.duration, easing: 'cubic-bezier(0.4,0,0.2,1)', fill: 'forwards' });
+          setTimeout(() => {
+            faceElements.forEach(f => {
+              let mx = 0, my = 0, mz = f.tz + 600;
+              if (p.direction === 'right' || p.direction === 'explode') mx = (f.ry === 90 ? 800 : (p.direction === 'right' ? 800 : 0));
+              if (p.direction === 'left' || p.direction === 'explode') mx = (f.ry === -90 ? -800 : (p.direction === 'left' ? -800 : mx));
+              if (p.direction === 'up' || p.direction === 'explode') my = (f.rx === 90 ? -800 : (p.direction === 'up' ? -800 : 0));
+              if (p.direction === 'down' || p.direction === 'explode') my = (f.rx === -90 ? 800 : (p.direction === 'down' ? 800 : my));
+              if (p.direction === 'explode') { if (f.rx === 0 && f.ry === 0) mz += 800; if (f.rx === 0 && f.ry === 180) mz -= 800; }
+              f.el.animate([{ transform: `rotateX(${f.rx}deg) rotateY(${f.ry}deg) translateZ(${f.tz}px)`, opacity: s.opacity }, { transform: `rotateX(${f.rx}deg) rotateY(${f.ry}deg) translateZ(${mz}px) translate3d(${mx}px, ${my}px, 0)`, opacity: 0 }], { duration: p.duration * 0.4, easing: 'ease-in', fill: 'forwards' });
+            });
+          }, p.duration * 0.6);
+        }
+        else if (type === 'portal') {
+          bg.style.filter = 'url(#portal-filter)';
+          const turb = document.getElementById('portal-turb'), disp = document.getElementById('portal-disp');
+          const { cvs, ctx } = setupCanvas();
+          const cx = w/2, cy = h/2; let start = performance.now();
+          function animPortal(t) {
+            let prog = Math.min((t - start) / p.duration, 1);
+            bg.style.transform = `rotate(${prog * 360 * p.rotationSpeed}deg) scale(${1 - prog})`;
+            bg.style.opacity = s.opacity * (1 - (prog*1.5));
+            if(turb) turb.setAttribute('baseFrequency', 0.01 + prog * 0.05);
+            if(disp) disp.setAttribute('scale', prog * p.distortion);
+            ctx.clearRect(0, 0, w, h); ctx.save(); ctx.translate(cx, cy); ctx.rotate((t - start) * 0.005 * p.rotationSpeed);
+            ctx.beginPath();
+            let maxRadius = Math.max(cx, cy) * (prog * p.expansionSpeed);
+            for (let i = 0; i < maxRadius; i++) { let angle = 0.1 * i; ctx.lineTo((1+2*angle)*Math.cos(angle), (1+2*angle)*Math.sin(angle)); }
+            ctx.strokeStyle = p.color; ctx.lineWidth = 8 + (prog * 20); ctx.globalAlpha = (1 - prog); ctx.shadowBlur = 20; ctx.shadowColor = p.color; ctx.stroke(); ctx.restore();
+            if (prog < 1) requestAnimationFrame(animPortal);
+          }
+          requestAnimationFrame(animPortal);
+        }
+        else if (type === 'shatteredMirror') {
+          bg.style.display = 'none'; overlay.style.perspective = '1000px';
+          const cx = w/2, cy = h/2;
+          for (let i = 0; i < p.pieces; i++) {
+            const angle1 = (i / p.pieces) * Math.PI*2, angle2 = ((i+1) / p.pieces) * Math.PI*2;
+            const r = Math.max(cx, cy) * 1.5;
+            const midX = cx + (Math.random()-0.5)*100, midY = cy + (Math.random()-0.5)*100;
+            const x1 = cx + Math.cos(angle1)*r, y1 = cy + Math.sin(angle1)*r;
+            const x2 = cx + Math.cos(angle2)*r, y2 = cy + Math.sin(angle2)*r;
+            const shard = document.createElement('div');
+            shard.style.cssText = `position:absolute; inset:0; ${bgStyleStr} background-size:${w}px ${h}px; clip-path:polygon(${midX}px ${midY}px, ${x1}px ${y1}px, ${x2}px ${y2}px); opacity:${s.opacity}; transform-style:preserve-3d;`;
+            if (p.reflections) {
+              const shine = document.createElement('div');
+              shine.style.cssText = `position:absolute; inset:0; background:linear-gradient(135deg, transparent 0%, rgba(255,255,255,0.8) 50%, transparent 100%); opacity:0;`;
+              shard.appendChild(shine);
+              shine.animate([{ transform:'translateX(-100%)', opacity:0 }, { transform:'translateX(0%)', opacity:1, offset:0.5 }, { transform:'translateX(100%)', opacity:0 }], { duration: p.duration * 0.8, delay: Math.random()*300 });
+            }
+            overlay.appendChild(shard);
+            const delay = Math.random() * (p.duration * 0.3);
+            shard.animate([
+              { transform: 'translate3d(0,0,0) rotateX(0) rotateY(0) rotateZ(0)', opacity: s.opacity },
+              { transform: `translate3d(${(Math.random()-0.5)*200}px, ${(h+500)*p.fallSpeed}px, ${Math.random()*500}px) rotateX(${(Math.random()-0.5)*360*p.rotationIntensity}deg) rotateY(${(Math.random()-0.5)*360*p.rotationIntensity}deg) rotateZ(${(Math.random()-0.5)*180*p.rotationIntensity}deg)`, opacity: 0 }
+            ], { duration: p.duration - delay, delay: delay, easing: 'cubic-bezier(0.5, 0, 1, 1)', fill: 'forwards' });
+          }
+        }
+      } 
+    };
+    
+    // Предварительно настраиваем фон до старта анимации (для прозрачности)
+    EffectRunner.initBg(State, 'stage-bg');
+    
+    let isPlayed = false;
+    function tryPlay() {
+      if(isPlayed) return;
+      const overlay = document.getElementById('effect-overlay');
+      
+      if(!overlay || overlay.clientWidth < 10 || overlay.clientHeight < 10) {
+        setTimeout(tryPlay, 50); 
+        return;
+      }
+      
+      isPlayed = true;
+      EffectRunner.play(State, 'stage-bg', 'effect-overlay');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if ('IntersectionObserver' in window) {
+        const obs = new IntersectionObserver((entries) => {
+          if (entries[0].isIntersecting) {
+            setTimeout(tryPlay, 200);
+            obs.disconnect();
+          }
+        }, { threshold: 0.05 });
+        obs.observe(document.body);
+      } else {
+        window.addEventListener('load', () => setTimeout(tryPlay, 500));
+      }
+      document.body.addEventListener('click', tryPlay);
+    });
+  </script>
+</body>
+</html>
