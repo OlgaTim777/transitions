@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChromaShift Studio - Ultimate Edition (15 Effects)</title>
+  <style>
+    :root {
+      --bg-dark: #0f0f1a; --bg-panel: #1a1a2e;
+      --neon-purple: #b14aff; --neon-cyan: #00e5ff;
+      --text-main: #e0e0ff; --border-color: #33334d;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { background: var(--bg-dark); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+    .app-layout { display: grid; grid-template-columns: 300px 1fr 340px; grid-template-rows: auto 1fr auto; height: 100vh; }
+    .app-header { grid-column: 1 / -1; padding: 15px 20px; background: var(--bg-panel); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; box-shadow: 0 0 15px rgba(0,0,0,0.5); z-index: 10; }
+    .app-header h1 { font-size: 1.5rem; color: var(--neon-cyan); text-shadow: 0 0 10px rgba(0, 229, 255, 0.5); margin: 0; }
+    .panel { background: var(--bg-panel); padding: 20px; overflow-y: auto; border-right: 1px solid var(--border-color); }
+    .properties-panel { border-right: none; border-left: 1px solid var(--border-color); }
+    .workspace { display: flex; align-items: center; justify-content: center; background: #05050a; position: relative; overflow: hidden; }
+    .bottom-panel { grid-column: 1 / -1; background: var(--bg-panel); border-top: 1px solid var(--border-color); padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+    
+    button { background: transparent; color: var(--text-main); border: 1px solid var(--border-color); padding: 8px 16px; border-radius: 4px; cursor: pointer; transition: all 0.2s ease; }
+    button:hover { background: rgba(255,255,255,0.1); }
+    .neon-btn { background: rgba(177, 74, 255, 0.1); border-color: var(--neon-purple); color: var(--neon-purple); font-weight: bold; text-shadow: 0 0 5px rgba(177, 74, 255, 0.5); box-shadow: 0 0 10px rgba(177, 74, 255, 0.2); }
+    .neon-btn:hover { background: var(--neon-purple); color: #fff; box-shadow: 0 0 20px rgba(177, 74, 255, 0.6); }
+    
+    h2, h3 { color: var(--neon-purple); margin-bottom: 15px; font-size: 1.1rem; }
+    .form-group { margin-bottom: 15px; display: flex; flex-direction: column; gap: 5px; }
+    .form-group label { font-size: 0.9rem; color: #aaa; display: flex; justify-content: space-between; }
+    .checkbox-group { flex-direction: row; align-items: center; gap: 10px; cursor: pointer; }
+    input[type="range"] { width: 100%; accent-color: var(--neon-cyan); }
+    input[type="color"] { width: 100%; height: 35px; border: none; cursor: pointer; background: transparent; }
+    select, input[type="text"] { width: 100%; padding: 8px; background: #0f0f1a; color: #fff; border: 1px solid var(--border-color); border-radius: 4px; outline: none; }
+    input[type="checkbox"] { accent-color: var(--neon-purple); width: 18px; height: 18px; cursor: pointer; }
+    textarea { width: 100%; height: 60px; background: #000; color: #0f0; border: 1px solid var(--border-color); padding: 8px; font-family: monospace; resize: none; }
+    
+    #preview-container { width: 800px; height: 450px; background: transparent; position: relative; box-shadow: 0 0 30px rgba(0,0,0,0.8); overflow: hidden; }
+    #stage-bg { position: absolute; inset: 0; background-size: cover; background-position: center; transition: all 0.3s ease; transform-origin: center; }
+    #effect-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+    
+    @keyframes neonPulse { 0% { filter: drop-shadow(0 0 5px var(--neon-color)); } 50% { filter: drop-shadow(0 0 var(--neon-intensity) var(--neon-color)); } 100% { filter: drop-shadow(0 0 5px var(--neon-color)); } }
+    .effect-neon { animation: neonPulse 2s infinite ease-in-out; }
+  </style>
+</head>
+<body>
+
+  <svg style="display:none;" width="0" height="0">
+    <defs>
+      <filter id="water-filter"><feTurbulence id="water-turb" type="fractalNoise" baseFrequency="0.01" numOctaves="2" result="turbulence"/><feDisplacementMap id="water-disp" in="SourceGraphic" in2="turbulence" scale="0" xChannelSelector="R" yChannelSelector="G"/></filter>
+      <filter id="portal-filter"><feTurbulence id="portal-turb" type="fractalNoise" baseFrequency="0.01" numOctaves="1" result="warp"/><feDisplacementMap id="portal-disp" in="SourceGraphic" in2="warp" scale="0" xChannelSelector="R" yChannelSelector="G"/></filter>
+    </defs>
+  </svg>
+
+  <div class="app-layout">
+    <header class="app-header">
+      <h1>ChromaShift Studio <span style="font-size:1rem; color:#aaa;">| Ultimate Organic Edition</span></h1>
+      <div>
+        <button id="btn-save-project">💾 Сохранить JSON</button>
+        <button id="btn-load-project" style="position:relative; overflow:hidden;">
+          📂 Загрузить <input type="file" id="file-load-json" accept=".json" style="position:absolute; inset:0; opacity:0; cursor:pointer;">
+        </button>
+      </div>
+    </header>
+
+    <aside class="panel tools-panel">
+      <h2>Настройки фона</h2>
+      
+      <div class="form-group">
+        <label>Тип фона</label>
+        <select id="bg-type-select">
+          <option value="url">URL Картинки</option>
+          <option value="color">Сплошной цвет</option>
+          <option value="pattern">Узор / Текстура</option>
+        </select>
+      </div>
+      
+      <div id="bg-url-group" class="form-group">
+        <label style="color: var(--neon-cyan); margin-bottom: 5px;">🖼️ URL Картинки</label>
+        <input type="text" id="url-bg" placeholder="https://... прямая ссылка">
+      </div>
+      
+      <div id="bg-color-group" class="form-group" style="display:none;">
+        <label style="color: var(--neon-cyan);">🎨 Базовый цвет фона</label>
+        <input type="color" id="color-bg" value="#05050a">
+      </div>
+
+      <div id="bg-pattern-group" class="form-group" style="display:none;">
+        <label style="color: var(--neon-cyan);">🏁 Выбор узора</label>
+        <select id="pattern-bg">
+          <option value="none">Без узора</option>
+          <option value="grid">Сетка (Grid)</option>
+          <option value="dots">Точки (Dots)</option>
+          <option value="stripes">Полосы (Stripes)</option>
+          <option value="checkerboard">Шахматка</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-top: 15px;">
+        <label>Прозрачность фона: <span id="bg-opacity-val">100%</span></label>
+        <input type="range" id="opacity-bg" min="0" max="1" step="0.05" value="1">
+      </div>
+      
+      <h3 style="margin-top: 30px;">Эффект перехода</h3>
+      <select id="effect-select">
+        <option value="none">Без эффекта</option>
+        <optgroup label="Художественные & Органические">
+          <option value="watercolor">💧 Акварельное растекание</option>
+          <option value="brushStrokes">🖌️ Мазки кистью</option>
+          <option value="cherryBlossom">🌸 Лепестки сакуры</option>
+          <option value="inkDrop">🖤 Чернильные кляксы</option>
+        </optgroup>
+        <optgroup label="2D Эффекты">
+          <option value="explosion">💥 Взрыв (Particles)</option>
+          <option value="shatter">🧩 Распад (Grid)</option>
+          <option value="flash">⚡ Вспышка света</option>
+          <option value="neon">💜 Неоновое зарево</option>
+          <option value="water">🌊 Смывание водой</option>
+          <option value="glitch">📺 Глитч</option>
+          <option value="loading">⏳ Эффект загрузки</option>
+        </optgroup>
+        <optgroup label="3D & Пространственные">
+          <option value="blackHole">🕳️ Черная Дыра</option>
+          <option value="cubeUnfold">📦 Раскрытие Куба</option>
+          <option value="portal">🌀 Портал искажения</option>
+          <option value="shatteredMirror">🪞 Разбитое зеркало 3D</option>
+        </optgroup>
+      </select>
+    </aside>
+
+    <main class="workspace">
+      <!-- Задний фон прозрачный (в клеточку) для того чтобы видеть opacity -->
+      <div style="position:absolute; inset:0; background: repeating-conic-gradient(#222 0% 25%, #111 0% 50%) 50% / 20px 20px; z-index:0; opacity: 0.5;"></div>
+      <div id="preview-container" style="background: transparent;">
+        <div id="stage-bg"></div>
+        <div id="effect-overlay"></div>
+      </div>
+    </main>
+
+    <aside class="panel properties-panel">
+      <h2>Свойства эффекта</h2>
+      <div id="properties-form"><div style="color:#aaa; font-size:0.9rem;">Выберите эффект слева.</div></div>
+    </aside>
+
+    <footer class="bottom-panel">
+      <div><button id="btn-play" class="neon-btn" style="font-size: 1.1rem; padding: 10px 25px;">▶ ПРЕДПРОСМОТР</button></div>
+      <div style="flex:1; margin: 0 20px; display:flex; flex-direction:column; gap:5px;">
+        <label style="font-size:0.8rem; color:var(--neon-cyan);">Код для Genially (Готовый Iframe)</label>
+        <textarea id="export-result" readonly placeholder="Нажмите 'Скачать HTML', чтобы получить код..."></textarea>
+      </div>
+      <div><button id="btn-export-html" class="neon-btn">📥 Скачать HTML & Iframe</button></div>
+    </footer>
+  </div>
+
+  <script>
+    const State = {
+      bgSettings: { type: 'url', url: '', color: '#05050a', pattern: 'none', opacity: 1 },
+      effect: { type: 'none' },
+      params: {
+        watercolor: { spreadIntensity: 30, edgeSoftness: 2, paperColor: '#f5f5dc', duration: 2500 },
+        brushStrokes: { strokeCount: 6, thickness: 100, paintColor: '#ff6b6b', edgeRoughness: 0.3, duration: 2000 },
+        cherryBlossom: { petalCount: 120, fallSpeed: 2, windStrength: 1, petalSize: 20, rotationIntensity: 1, duration: 3000 },
+        inkDrop: { inkColor: '#000000', dropCount: 5, edgeRoughness: 0.5, startPosition: 'random', duration: 2500 },
+        explosion: { particles: 80, color: '#ffffff', duration: 2000 },
+        shatter: { pieces: 16, duration: 1500 },
+        flash: { duration: 800 },
+        neon: { color: '#b14aff', intensity: 20, duration: 3000 },
+        water: { intensity: 50, duration: 2000 },
+        glitch: { duration: 1500 },
+        loading: { color: '#00e5ff', speed: 1, duration: 2500 },
+        blackHole: { rotationSpeed: 2, singularitySize: 50, diskColor: '#b14aff', particles: 180, duration: 3000 },
+        cubeUnfold: { rotationSpeed: 1.5, direction: 'right', perspective: 800, duration: 2500 },
+        portal: { rotationSpeed: 3, expansionSpeed: 2, color: '#6a00ff', distortion: 50, duration: 2500 },
+        shatteredMirror: { pieces: 20, fallSpeed: 1.5, rotationIntensity: 1, reflections: true, duration: 2000 }
+      }
+    };
+
+    const DOM = {
+      bgTypeSelect: document.getElementById('bg-type-select'), bgUrlGroup: document.getElementById('bg-url-group'),
+      bgColorGroup: document.getElementById('bg-color-group'), bgPatternGroup: document.getElementById('bg-pattern-group'),
+      urlBg: document.getElementById('url-bg'), colorBg: document.getElementById('color-bg'),
+      patternBg: document.getElementById('pattern-bg'), opacityBg: document.getElementById('opacity-bg'),
+      opacityBgVal: document.getElementById('bg-opacity-val'), stageBg: document.getElementById('stage-bg'),
+      overlay: document.getElementById('effect-overlay'), effectSelect: document.getElementById('effect-select'),
+      propsForm: document.getElementById('properties-form'), btnPlay: document.getElementById('btn-play'),
+      btnExport: document.getElementById('btn-export-html'), exportResult: document.getElementById('export-result'),
+      btnLoadJson: document.getElementById('file-load-json')
+    };
+
+    function updateBgUI() {
+      DOM.bgUrlGroup.style.display = State.bgSettings.type === 'url' ? 'block' : 'none';
+      DOM.bgColorGroup.style.display = (State.bgSettings.type === 'color' || State.bgSettings.type === 'pattern') ? 'block' : 'none';
+      DOM.bgPatternGroup.style.display = State.bgSettings.type === 'pattern' ? 'block' : 'none';
+      
+      DOM.bgTypeSelect.value = State.bgSettings.type;
+      DOM.urlBg.value = State.bgSettings.url;
+      DOM.colorBg.value = State.bgSettings.color;
+      DOM.patternBg.value = State.bgSettings.pattern;
+      DOM.opacityBg.value = State.bgSettings.opacity;
+      DOM.opacityBgVal.innerText = Math.round(State.bgSettings.opacity * 100) + '%';
+    }
+
+    [DOM.bgTypeSelect, DOM.urlBg, DOM.colorBg, DOM.patternBg, DOM.opacityBg].forEach(el => {
+      el.addEventListener('input', () => {
+        State.bgSettings.type = DOM.bgTypeSelect.value;
+        State.bgSettings.url = DOM.urlBg.value.trim();
+        State.bgSettings.color = DOM.colorBg.value;
+        State.bgSettings.pattern = DOM.patternBg.value;
+        State.bgSettings.opacity = parseFloat(DOM.opacityBg.value);
+        updateBgUI();
+        EffectRunner.initBg(State, 'stage-bg');
+      });
+    });
+
+    DOM.effectSelect.addEventListener('change', (e) => { State.effect.type = e.target.value; renderProperties(); });
+
+    function renderProperties() {
+      const type = State.effect.type;
+      const p = State.params[type];
+      let html = '';
+
+      const createSlider = (id, label, min, max, val, step=1) => `<div class="form-group"><label>${label}: <span id="${id}-val">${val}</span></label><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}"></div>`;
+      const createColor = (id, label, val) => `<div class="form-group"><label>${label}</label><input type="color" id="${id}" value="${val}"></div>`;
+      const createSelect = (id, label, options, selectedVal) => `<div class="form-group"><label>${label}</label><select id="${id}">${options.map(opt => `<option value="${opt.val}" ${selectedVal === opt.val ? 'selected' : ''}>${opt.text}</option>`).join('')}</select></div>`;
+      const createCheckbox = (id, label, checked) => `<label class="form-group checkbox-group"><input type="checkbox" id="${id}" ${checked ? 'checked' : ''}><span>${label}</span></label>`;
+      const createDuration = (val) => createSlider('prop-dur', 'Длительность (мс)', 500, 5000, val, 100);
+
+      if (type === 'none') { html = `<div style="color:#aaa;">Нет настроек</div>`; }
+      else if (type === 'watercolor') {
+        html += createDuration(p.duration) + createSlider('prop-spread', 'Искажение краев', 10, 100, p.spreadIntensity) + createSlider('prop-soft', 'Мягкость', 0, 10, p.edgeSoftness, 0.1) + createColor('prop-col', 'Цвет бумаги', p.paperColor);
+      } else if (type === 'brushStrokes') {
+        html += createDuration(p.duration) + createSlider('prop-count', 'Количество мазков', 3, 15, p.strokeCount) + createSlider('prop-thick', 'Толщина кисти', 30, 200, p.thickness) + createSlider('prop-rough', 'Неровность краев', 0, 1, p.edgeRoughness, 0.05) + createColor('prop-col', 'Цвет краски', p.paintColor);
+      } else if (type === 'cherryBlossom') {
+        html += createDuration(p.duration) + createSlider('prop-part', 'Количество лепестков', 50, 300, p.petalCount) + createSlider('prop-size', 'Размер лепестка', 10, 50, p.petalSize) + createSlider('prop-speed', 'Скорость падения', 1, 5, p.fallSpeed, 0.1) + createSlider('prop-wind', 'Сила ветра', 0, 3, p.windStrength, 0.1) + createSlider('prop-rot', 'Интенсивность вращения', 0.1, 3, p.rotationIntensity, 0.1);
+      } else if (type === 'inkDrop') {
+        html += createDuration(p.duration) + createSlider('prop-count', 'Количество клякс', 1, 10, p.dropCount) + createSlider('prop-rough', 'Рваные края', 0, 1, p.edgeRoughness, 0.05) + createSelect('prop-pos', 'Начальная позиция', [{val:'random', text:'Случайные точки'}, {val:'center', text:'Из центра'}], p.startPosition) + createColor('prop-col', 'Цвет чернил', p.inkColor);
+      }
+      else if (type === 'explosion') html += createDuration(p.duration) + createSlider('prop-part', 'Количество частиц', 10, 200, p.particles) + createColor('prop-col', 'Цвет частиц', p.color);
+      else if (type === 'shatter') html += createDuration(p.duration) + createSlider('prop-pieces', 'Количество частей', 4, 100, p.pieces);
+      else if (type === 'flash' || type === 'glitch') html += createDuration(p.duration);
+      else if (type === 'neon') html += createDuration(p.duration) + createSlider('prop-int', 'Интенсивность (px)', 0, 50, p.intensity) + createColor('prop-col', 'Цвет свечения', p.color);
+      else if (type === 'water') html += createDuration(p.duration) + createSlider('prop-int', 'Сила искажения', 10, 150, p.intensity);
+      else if (type === 'loading') html += createDuration(p.duration) + createSlider('prop-speed', 'Скорость', 0.5, 3, p.speed, 0.1) + createColor('prop-col', 'Цвет', p.color);
+      else if (type === 'blackHole') html += createDuration(p.duration) + createSlider('prop-rot', 'Вращение', 0.5, 5, p.rotationSpeed, 0.1) + createSlider('prop-size', 'Размер', 10, 150, p.singularitySize) + createSlider('prop-part', 'Частицы', 50, 300, p.particles) + createColor('prop-col', 'Цвет диска', p.diskColor);
+      else if (type === 'cubeUnfold') html += createDuration(p.duration) + createSlider('prop-rot', 'Вращение', 0.5, 3, p.rotationSpeed, 0.1) + createSlider('prop-persp', 'Перспектива', 400, 1500, p.perspective, 50) + createSelect('prop-dir', 'Направление', [{val:'right',text:'Вправо'}, {val:'left',text:'Влево'}, {val:'up',text:'Вверх'}, {val:'down',text:'Вниз'}, {val:'explode',text:'Во все стороны'}], p.direction);
+      else if (type === 'portal') html += createDuration(p.duration) + createSlider('prop-rot', 'Вращение', 1, 10, p.rotationSpeed, 0.5) + createSlider('prop-exp', 'Расширение', 1, 5, p.expansionSpeed, 0.1) + createSlider('prop-dist', 'Искажение', 0, 100, p.distortion) + createColor('prop-col', 'Цвет портала', p.color);
+      else if (type === 'shatteredMirror') html += createDuration(p.duration) + createSlider('prop-pieces', 'Осколки', 5, 50, p.pieces) + createSlider('prop-speed', 'Падение', 0.5, 3, p.fallSpeed, 0.1) + createSlider('prop-rot', 'Вращение', 0.1, 3, p.rotationIntensity, 0.1) + createCheckbox('prop-refl', 'Блики', p.reflections);
+
+      DOM.propsForm.innerHTML = html;
+
+      const bind = (id, key, isNum = true) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', (e) => {
+          if (el.type === 'checkbox') State.params[type][key] = e.target.checked;
+          else State.params[type][key] = isNum ? parseFloat(e.target.value) : e.target.value;
+          if(document.getElementById(`${id}-val`)) document.getElementById(`${id}-val`).innerText = e.target.value;
+          EffectRunner.play(State, 'stage-bg', 'effect-overlay');
+        });
+      };
+
+      bind('prop-dur', 'duration');
+      ['part','pieces','int','speed','rot','size','persp','exp','dist','count','thick','rough','wind','spread','soft'].forEach(k => {
+        const keysMap = { part:'particles',pieces:'pieces',int:'intensity',speed:'speed',rot:'rotationSpeed',size:'singularitySize',persp:'perspective',exp:'expansionSpeed',dist:'distortion',count:'strokeCount',thick:'thickness',rough:'edgeRoughness',wind:'windStrength',spread:'spreadIntensity',soft:'edgeSoftness' };
+        if(keysMap[k]) bind(`prop-${k}`, keysMap[k]);
+      });
+      bind('prop-rot', 'rotationIntensity'); 
+      bind('prop-count', 'petalCount'); bind('prop-count', 'dropCount'); bind('prop-speed', 'fallSpeed');
+      bind('prop-col', 'color', false); bind('prop-col', 'diskColor', false); bind('prop-col', 'paintColor', false); bind('prop-col', 'inkColor', false); bind('prop-col', 'paperColor', false);
+      bind('prop-dir', 'direction', false); bind('prop-pos', 'startPosition', false); bind('prop-refl', 'reflections', false);
+    }
+
+    const EffectRunner = {
+      initBg: function(state, bgElementId) {
+        const bg = document.getElementById(bgElementId);
+        if(!bg) return;
+        const s = state.bgSettings;
+        bg.style.cssText = `position:absolute; inset:0; transform-origin:center; display:block; filter:none; transform:none; clip-path:none;`;
+        bg.style.opacity = s.opacity;
+
+        if (s.type === 'url' && s.url) {
+          bg.style.backgroundImage = `url('${s.url}')`;
+          bg.style.backgroundSize = 'cover';
+          bg.style.backgroundPosition = 'center';
+          bg.style.backgroundColor = 'transparent';
+        } else if (s.type === 'color' || s.type === 'pattern') {
+          bg.style.backgroundColor = s.color;
+          bg.style.backgroundImage = 'none';
+          if (s.type === 'pattern') {
+            if (s.pattern === 'grid') {
+              bg.style.backgroundImage = `linear-gradient(rgba(255,255,255,0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.2) 1px, transparent 1px)`;
+              bg.style.backgroundSize = '20px 20px';
+            } else if (s.pattern === 'dots') {
+              bg.style.backgroundImage = `radial-gradient(rgba(255,255,255,0.3) 2px, transparent 2px)`;
+              bg.style.backgroundSize = '20px 20px';
+            } else if (s.pattern === 'stripes') {
+              bg.style.backgroundImage = `repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.1) 10px, rgba(255,255,255,0.1) 20px)`;
+            } else if (s.pattern === 'checkerboard') {
+               bg.style.backgroundImage = `linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%, rgba(255,255,255,0.1)), linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%, rgba(255,255,255,0.1))`;
+               bg.style.backgroundPosition = `0 0, 10px 10px`;
+               bg.style.backgroundSize = `20px 20px`;
+            }
+          }
+        }
+      },
+      play: function(state, bgElementId, overlayElementId) {
+        this.initBg(state, bgElementId);
+        const bg = document.getElementById(bgElementId);
+        const overlay = document.getElementById(overlayElementId);
+        const type = state.effect.type;
+        const p = state.params[type];
+        const s = state.bgSettings;
+        const w = overlay.clientWidth, h = overlay.clientHeight;
+        
+        overlay.innerHTML = ''; overlay.style.perspective = 'none';
+        document.documentElement.style.setProperty('--neon-color', 'transparent');
+        document.documentElement.style.setProperty('--neon-intensity', '0px');
+
+        if (type === 'none' || (s.type === 'url' && !s.url)) return;
+
+        const bgStyleStr = `background-image: ${bg.style.backgroundImage}; background-color: ${bg.style.backgroundColor}; background-size: ${bg.style.backgroundSize || 'cover'}; background-position: ${bg.style.backgroundPosition || 'center'};`;
+
+        const setupCanvas = () => {
+          const cvs = document.createElement('canvas');
+          cvs.width = w; cvs.height = h;
+          cvs.style.cssText = `position:absolute; inset:0; pointer-events:none;`;
+          overlay.appendChild(cvs);
+          return { cvs, ctx: cvs.getContext('2d') };
+        };
+
+        if (type === 'watercolor') {
+          bg.style.display = 'none';
+          const uid = Date.now();
+          const isUrl = s.type === 'url' && s.url;
+          const bgContent = isUrl 
+            ? `<image href="${s.url}" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" mask="url(#wc-mask-${uid})" filter="url(#wc-filt-${uid})"/>`
+            : `<rect width="100%" height="100%" fill="${s.color}" mask="url(#wc-mask-${uid})" filter="url(#wc-filt-${uid})"/>`;
+
+          const svgHTML = `
+            <svg width="100%" height="100%" style="position:absolute; inset:0; background:${p.paperColor}; opacity:${s.opacity};">
+              <defs>
+                <filter id="wc-filt-${uid}">
+                  <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="3" result="n"/>
+                  <feDisplacementMap in="SourceGraphic" in2="n" scale="${p.spreadIntensity}" xChannelSelector="R" yChannelSelector="G"/>
+                  <feGaussianBlur stdDeviation="${p.edgeSoftness}"/>
+                </filter>
+                <mask id="wc-mask-${uid}"></mask>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#noise-pat)" opacity="0.1" style="mix-blend-mode:multiply;"/>
+              ${bgContent}
+            </svg>
+          `;
+          overlay.innerHTML = svgHTML;
+          const mask = overlay.querySelector(`mask`);
+          for(let i=0; i<6; i++) {
+            let c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            c.setAttribute('cx', Math.random()*w); c.setAttribute('cy', Math.random()*h);
+            c.setAttribute('fill', 'white');
+            mask.appendChild(c);
+            let maxR = Math.max(w, h) * 0.8;
+            c.animate([{r:0}, {r:maxR}], {duration: p.duration, delay: Math.random()*(p.duration*0.3), fill:'forwards', easing:'ease-in-out'});
+          }
+        }
+        else if (type === 'brushStrokes') {
+          const uid = Date.now();
+          const svgHTML = `
+            <svg width="100%" height="100%" style="position:absolute; inset:0;">
+              <defs>
+                <filter id="brush-edge-${uid}">
+                  <feTurbulence type="fractalNoise" baseFrequency="${0.1 - p.edgeRoughness*0.08}" numOctaves="2" result="n"/>
+                  <feDisplacementMap in="SourceGraphic" in2="n" scale="${p.edgeRoughness*50}" xChannelSelector="R" yChannelSelector="G"/>
+                </filter>
+              </defs>
+              <g id="stroke-container-${uid}" filter="url(#brush-edge-${uid})"></g>
+            </svg>
+          `;
+          overlay.innerHTML = svgHTML;
+          const container = overlay.querySelector(`#stroke-container-${uid}`);
+          for(let i=0; i<p.strokeCount; i++) {
+            let y = (h / p.strokeCount) * i + (Math.random()*50);
+            let d = `M -100 ${y} Q ${w/2} ${y + (Math.random()-0.5)*300} ${w+100} ${y + (Math.random()-0.5)*100}`;
+            let shadow = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            shadow.setAttribute('d', d); shadow.setAttribute('stroke', p.paintColor); shadow.setAttribute('stroke-width', p.thickness * 1.2);
+            shadow.setAttribute('fill', 'none'); shadow.setAttribute('stroke-linecap', 'round'); shadow.setAttribute('opacity', '0.4');
+            let path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', d); path.setAttribute('stroke', p.paintColor); path.setAttribute('stroke-width', p.thickness);
+            path.setAttribute('fill', 'none'); path.setAttribute('stroke-linecap', 'round');
+            container.appendChild(shadow); container.appendChild(path);
+            let len = w * 1.5; 
+            [shadow, path].forEach(el => {
+              el.setAttribute('stroke-dasharray', len); el.setAttribute('stroke-dashoffset', len);
+              el.animate([{strokeDashoffset: len}, {strokeDashoffset: 0}], { duration: p.duration * 0.7, delay: i * (p.duration * 0.3 / p.strokeCount), fill: 'forwards', easing: 'ease-in-out' });
+            });
+          }
+          bg.animate([{opacity: s.opacity}, {opacity:0}], {duration: p.duration, fill:'forwards'});
+        }
+        else if (type === 'cherryBlossom') {
+          const { cvs, ctx } = setupCanvas();
+          let petals = Array.from({length: p.petalCount}).map(() => ({
+            x: Math.random()*w, y: Math.random()*h - h, 
+            size: Math.random()*(p.petalSize-10) + 10, speedY: Math.random()*(p.fallSpeed) + p.fallSpeed, speedX: Math.random() - 0.5,
+            rot: Math.random()*Math.PI*2, rotSpeed: (Math.random()-0.5) * 0.1 * p.rotationIntensity, osc: Math.random()*Math.PI*2, oscSpeed: Math.random()*0.05
+          }));
+          bg.animate([{opacity: s.opacity}, {opacity: 0}], {duration: p.duration, fill: 'forwards'});
+          let start = performance.now();
+          function drawPetals(t) {
+            ctx.clearRect(0, 0, w, h); let alive = false;
+            petals.forEach(pObj => {
+              pObj.y += pObj.speedY; pObj.osc += pObj.oscSpeed; pObj.x += pObj.speedX + Math.sin(pObj.osc)*2 + p.windStrength; pObj.rot += pObj.rotSpeed;
+              if (pObj.y < h + 50) alive = true;
+              ctx.save(); ctx.translate(pObj.x, pObj.y); ctx.rotate(pObj.rot);
+              ctx.beginPath(); ctx.moveTo(0, -pObj.size/2); ctx.bezierCurveTo(pObj.size/2, -pObj.size/4, pObj.size/2, pObj.size/2, 0, pObj.size/2);
+              ctx.bezierCurveTo(-pObj.size/2, pObj.size/2, -pObj.size/2, -pObj.size/4, 0, -pObj.size/2);
+              let grad = ctx.createLinearGradient(0, -pObj.size/2, 0, pObj.size/2);
+              grad.addColorStop(0, '#ffb7c5'); grad.addColorStop(1, 'rgba(255,255,255,0.8)');
+              ctx.fillStyle = grad; ctx.fill(); ctx.restore();
+            });
+            if (alive && (t - start) < p.duration * 1.5) requestAnimationFrame(drawPetals);
+          }
+          requestAnimationFrame(drawPetals);
+        }
+        else if (type === 'inkDrop') {
+          const uid = Date.now();
+          const svgHTML = `
+            <svg width="100%" height="100%" style="position:absolute; inset:0; pointer-events:none;">
+              <defs>
+                <filter id="ink-edge-${uid}">
+                  <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" result="n"/>
+                  <feDisplacementMap in="SourceGraphic" in2="n" scale="${p.edgeRoughness * 100}" xChannelSelector="R" yChannelSelector="G"/>
+                </filter>
+                <radialGradient id="ink-grad-${uid}">
+                  <stop offset="60%" stop-color="${p.inkColor}" stop-opacity="1"/>
+                  <stop offset="100%" stop-color="${p.inkColor}" stop-opacity="0.8"/>
+                </radialGradient>
+              </defs>
+              <g id="ink-container-${uid}" filter="url(#ink-edge-${uid})"></g>
+            </svg>
+          `;
+          overlay.innerHTML = svgHTML;
+          const container = overlay.querySelector(`#ink-container-${uid}`);
+          for(let i=0; i<p.dropCount; i++) {
+            let cx = p.startPosition === 'center' ? w/2 + (Math.random()-0.5)*100 : Math.random()*w;
+            let cy = p.startPosition === 'center' ? h/2 + (Math.random()-0.5)*100 : Math.random()*h;
+            let drop = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            drop.setAttribute('cx', cx); drop.setAttribute('cy', cy); drop.setAttribute('fill', `url(#ink-grad-${uid})`);
+            container.appendChild(drop);
+            let maxR = Math.max(w, h) * 1.5;
+            drop.animate([{ r: 0, opacity: 0.8 }, { r: maxR, opacity: 1 }], { duration: p.duration * 0.8, delay: i * (p.duration * 0.2 / p.dropCount), fill: 'forwards', easing: 'cubic-bezier(0.5, 0, 0.2, 1)' });
+          }
+        }
+        else if (type === 'explosion') {
+          const { cvs, ctx } = setupCanvas();
+          let particles = Array.from({length: p.particles}).map(() => ({ x: w/2, y: h/2, vx: (Math.random()-0.5)*20, vy: (Math.random()-0.5)*20, r: Math.random()*5+2, a: 1 }));
+          let start = performance.now();
+          bg.animate([{opacity: s.opacity}, {opacity: 0}], {duration: p.duration, fill: 'forwards'});
+          function render(t) {
+            ctx.clearRect(0, 0, w, h); let alive = false;
+            particles.forEach(pt => {
+              if (pt.a <= 0) return; alive = true;
+              pt.vy += 0.5; pt.x += pt.vx; pt.y += pt.vy; pt.a -= (16/p.duration);
+              ctx.globalAlpha = Math.max(0, pt.a); ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI*2); ctx.fill();
+            });
+            if (alive && (t - start) < p.duration) requestAnimationFrame(render);
+          }
+          requestAnimationFrame(render);
+        }
+        else if (type === 'shatter') {
+          bg.style.display = 'none';
+          const cols = Math.ceil(Math.sqrt(p.pieces)), rows = Math.ceil(p.pieces/cols);
+          const pw = w/cols, ph = h/rows;
+          for (let r=0; r<rows; r++) {
+            for (let c=0; c<cols; c++) {
+              if (r*cols+c >= p.pieces && p.pieces !== cols*rows) continue;
+              const piece = document.createElement('div');
+              piece.style.cssText = `position:absolute; left:${c*pw}px; top:${r*ph}px; width:${pw}px; height:${ph}px; ${bgStyleStr} background-size:${w}px ${h}px; background-position:-${c*pw}px -${r*ph}px; opacity: ${s.opacity};`;
+              overlay.appendChild(piece);
+              piece.animate([
+                { transform: 'translate3d(0,0,0) rotate3d(0,0,0,0deg)', opacity: s.opacity },
+                { transform: `translate3d(${(Math.random()-0.5)*500}px, ${(Math.random()-0.5)*500}px, ${(Math.random()-0.5)*500}px) rotate3d(1,1,1,${(Math.random()-0.5)*720}deg)`, opacity: 0 }
+              ], { duration: p.duration, easing: 'cubic-bezier(0.25,1,0.5,1)', fill: 'forwards' });
+            }
+          }
+        }
+        else if (type === 'flash') {
+          const flash = document.createElement('div');
+          flash.style.cssText = `position:absolute; inset:0; background:#fff; z-index:999;`;
+          overlay.appendChild(flash);
+          flash.animate([{opacity:1}, {opacity:0}], { duration: p.duration, easing:'ease-out', fill:'forwards' });
+        }
+        else if (type === 'neon') {
+          document.documentElement.style.setProperty('--neon-color', p.color);
+          document.documentElement.style.setProperty('--neon-intensity', `${p.intensity}px`);
+          bg.classList.add('effect-neon');
+          setTimeout(() => bg.classList.remove('effect-neon'), p.duration);
+        }
+        else if (type === 'water') {
+          bg.style.filter = 'url(#water-filter)';
+          const turb = document.getElementById('water-turb'), disp = document.getElementById('water-disp');
+          let start = performance.now();
+          function anim(t) {
+            let prog = Math.min((t - start) / p.duration, 1);
+            if(turb) turb.setAttribute('baseFrequency', 0.01 + prog * 0.05);
+            if(disp) disp.setAttribute('scale', prog * p.intensity);
+            bg.style.opacity = s.opacity * (1 - prog);
+            if (prog < 1) requestAnimationFrame(anim);
+          }
+          requestAnimationFrame(anim);
+        }
+        else if (type === 'glitch') {
+          bg.style.display = 'none';
+          const colors = ['rgba(255,0,0,1)', 'rgba(0,255,0,1)', 'rgba(0,0,255,1)'];
+          let layers = colors.map((col, i) => {
+            const l = document.createElement('div');
+            l.style.cssText = `position:absolute; inset:0; ${bgStyleStr} filter:drop-shadow(${i*5-5}px 0 0 ${col}); mix-blend-mode:screen; opacity:${s.opacity};`;
+            overlay.appendChild(l); return l;
+          });
+          let interval = setInterval(() => {
+            layers.forEach(l => {
+              const top = Math.random()*100, bottom = Math.random()*100;
+              l.style.clipPath = `inset(${top}% 0 ${100-bottom-top}% 0)`;
+              l.style.transform = `translateX(${(Math.random()-0.5)*20}px)`;
+            });
+          }, 50);
+          layers.forEach(l => l.animate([{opacity:s.opacity}, {opacity:0}], { duration: p.duration, fill:'forwards', easing:'ease-in' }));
+          setTimeout(() => clearInterval(interval), p.duration);
+        }
+        else if (type === 'loading') {
+          bg.animate([{opacity:s.opacity}, {opacity:0}], {duration: p.duration/2, fill:'forwards'});
+          const spinner = document.createElement('div');
+          spinner.style.cssText = `position:absolute; left:50%; top:50%; width:80px; height:80px; border:8px solid rgba(255,255,255,0.1); border-top-color:${p.color}; border-radius:50%; margin:-40px 0 0 -40px;`;
+          spinner.animate([{transform:'rotate(0deg)'}, {transform:'rotate(360deg)'}], {duration: 1000/p.speed, iterations: Infinity});
+          overlay.appendChild(spinner);
+          setTimeout(() => spinner.animate([{opacity:1}, {opacity:0}], {duration: 500, fill:'forwards'}), p.duration - 500);
+        }
+        else if (type === 'blackHole') {
+          const { cvs, ctx } = setupCanvas();
+          const cx = w/2, cy = h/2;
+          let particles = Array.from({length: p.particles}).map(() => ({ angle: Math.random()*Math.PI*2, dist: Math.random()*(Math.max(cx, cy)) + p.singularitySize, size: Math.random()*3+1 }));
+          let start = performance.now();
+          bg.animate([{opacity: s.opacity}, {opacity: 0, offset: 0.5}, {opacity: 0}], {duration: p.duration, fill: 'forwards'});
+          function drawBlackHole(t) {
+            let prog = Math.min((t - start) / p.duration, 1);
+            ctx.clearRect(0, 0, w, h);
+            ctx.beginPath(); ctx.arc(cx, cy, p.singularitySize + (Math.sin((t-start)*0.01)*5), 0, Math.PI*2);
+            ctx.shadowBlur = 30 + prog*50; ctx.shadowColor = p.diskColor; ctx.strokeStyle = p.diskColor; ctx.lineWidth = 5; ctx.stroke(); ctx.shadowBlur = 0; 
+            ctx.beginPath(); ctx.arc(cx, cy, p.singularitySize * 0.95, 0, Math.PI*2); ctx.fillStyle = '#000'; ctx.fill();
+            ctx.fillStyle = '#fff';
+            particles.forEach(pt => {
+              pt.dist -= (p.rotationSpeed * (cx/Math.max(pt.dist, 1))); 
+              pt.angle += (p.rotationSpeed * 0.05) * (cx/Math.max(pt.dist, 10));
+              let alpha = pt.dist < p.singularitySize ? 0 : Math.min(1, (pt.dist - p.singularitySize)/50);
+              if (alpha > 0) {
+                ctx.globalAlpha = alpha * (1 - prog);
+                ctx.beginPath(); ctx.arc(cx + Math.cos(pt.angle)*pt.dist, cy + Math.sin(pt.angle)*pt.dist, pt.size, 0, Math.PI*2); ctx.fill();
+              }
+            });
+            ctx.globalAlpha = 1;
+            if (prog < 1) requestAnimationFrame(drawBlackHole);
+          }
+          requestAnimationFrame(drawBlackHole);
+        }
+        else if (type === 'cubeUnfold') {
+          bg.style.display = 'none'; overlay.style.perspective = `${p.perspective}px`;
+          const size = Math.min(w, h) * 0.6, half = size / 2;
+          const box = document.createElement('div');
+          box.style.cssText = `position:absolute; width:${size}px; height:${size}px; left:50%; top:50%; margin-left:-${half}px; margin-top:-${half}px; transform-style:preserve-3d;`;
+          overlay.appendChild(box);
+          const faces = [{rx:0,ry:0,tz:half}, {rx:0,ry:180,tz:half}, {rx:0,ry:-90,tz:half}, {rx:0,ry:90,tz:half}, {rx:90,ry:0,tz:half}, {rx:-90,ry:0,tz:half}];
+          const faceElements = faces.map(f => {
+            const face = document.createElement('div');
+            face.style.cssText = `position:absolute; inset:0; ${bgStyleStr} opacity:${s.opacity}; transform:rotateX(${f.rx}deg) rotateY(${f.ry}deg) translateZ(${f.tz}px); backface-visibility:hidden; box-shadow: inset 0 0 50px rgba(0,0,0,0.5);`;
+            box.appendChild(face); return { el: face, ...f };
+          });
+          box.animate([{ transform: `rotateX(0deg) rotateY(0deg)` }, { transform: `rotateX(${360*p.rotationSpeed}deg) rotateY(${360*p.rotationSpeed}deg)` }], { duration: p.duration, easing: 'cubic-bezier(0.4,0,0.2,1)', fill: 'forwards' });
+          setTimeout(() => {
+            faceElements.forEach(f => {
+              let mx = 0, my = 0, mz = f.tz + 600;
+              if (p.direction === 'right' || p.direction === 'explode') mx = (f.ry === 90 ? 800 : (p.direction === 'right' ? 800 : 0));
+              if (p.direction === 'left' || p.direction === 'explode') mx = (f.ry === -90 ? -800 : (p.direction === 'left' ? -800 : mx));
+              if (p.direction === 'up' || p.direction === 'explode') my = (f.rx === 90 ? -800 : (p.direction === 'up' ? -800 : 0));
+              if (p.direction === 'down' || p.direction === 'explode') my = (f.rx === -90 ? 800 : (p.direction === 'down' ? 800 : my));
+              if (p.direction === 'explode') { if (f.rx === 0 && f.ry === 0) mz += 800; if (f.rx === 0 && f.ry === 180) mz -= 800; }
+              f.el.animate([{ transform: `rotateX(${f.rx}deg) rotateY(${f.ry}deg) translateZ(${f.tz}px)`, opacity: s.opacity }, { transform: `rotateX(${f.rx}deg) rotateY(${f.ry}deg) translateZ(${mz}px) translate3d(${mx}px, ${my}px, 0)`, opacity: 0 }], { duration: p.duration * 0.4, easing: 'ease-in', fill: 'forwards' });
+            });
+          }, p.duration * 0.6);
+        }
+        else if (type === 'portal') {
+          bg.style.filter = 'url(#portal-filter)';
+          const turb = document.getElementById('portal-turb'), disp = document.getElementById('portal-disp');
+          const { cvs, ctx } = setupCanvas();
+          const cx = w/2, cy = h/2; let start = performance.now();
+          function animPortal(t) {
+            let prog = Math.min((t - start) / p.duration, 1);
+            bg.style.transform = `rotate(${prog * 360 * p.rotationSpeed}deg) scale(${1 - prog})`;
+            bg.style.opacity = s.opacity * (1 - (prog*1.5));
+            if(turb) turb.setAttribute('baseFrequency', 0.01 + prog * 0.05);
+            if(disp) disp.setAttribute('scale', prog * p.distortion);
+            ctx.clearRect(0, 0, w, h); ctx.save(); ctx.translate(cx, cy); ctx.rotate((t - start) * 0.005 * p.rotationSpeed);
+            ctx.beginPath();
+            let maxRadius = Math.max(cx, cy) * (prog * p.expansionSpeed);
+            for (let i = 0; i < maxRadius; i++) { let angle = 0.1 * i; ctx.lineTo((1+2*angle)*Math.cos(angle), (1+2*angle)*Math.sin(angle)); }
+            ctx.strokeStyle = p.color; ctx.lineWidth = 8 + (prog * 20); ctx.globalAlpha = (1 - prog); ctx.shadowBlur = 20; ctx.shadowColor = p.color; ctx.stroke(); ctx.restore();
+            if (prog < 1) requestAnimationFrame(animPortal);
+          }
+          requestAnimationFrame(animPortal);
+        }
+        else if (type === 'shatteredMirror') {
+          bg.style.display = 'none'; overlay.style.perspective = '1000px';
+          const cx = w/2, cy = h/2;
+          for (let i = 0; i < p.pieces; i++) {
+            const angle1 = (i / p.pieces) * Math.PI*2, angle2 = ((i+1) / p.pieces) * Math.PI*2;
+            const r = Math.max(cx, cy) * 1.5;
+            const midX = cx + (Math.random()-0.5)*100, midY = cy + (Math.random()-0.5)*100;
+            const x1 = cx + Math.cos(angle1)*r, y1 = cy + Math.sin(angle1)*r;
+            const x2 = cx + Math.cos(angle2)*r, y2 = cy + Math.sin(angle2)*r;
+            const shard = document.createElement('div');
+            shard.style.cssText = `position:absolute; inset:0; ${bgStyleStr} background-size:${w}px ${h}px; clip-path:polygon(${midX}px ${midY}px, ${x1}px ${y1}px, ${x2}px ${y2}px); opacity:${s.opacity}; transform-style:preserve-3d;`;
+            if (p.reflections) {
+              const shine = document.createElement('div');
+              shine.style.cssText = `position:absolute; inset:0; background:linear-gradient(135deg, transparent 0%, rgba(255,255,255,0.8) 50%, transparent 100%); opacity:0;`;
+              shard.appendChild(shine);
+              shine.animate([{ transform:'translateX(-100%)', opacity:0 }, { transform:'translateX(0%)', opacity:1, offset:0.5 }, { transform:'translateX(100%)', opacity:0 }], { duration: p.duration * 0.8, delay: Math.random()*300 });
+            }
+            overlay.appendChild(shard);
+            const delay = Math.random() * (p.duration * 0.3);
+            shard.animate([
+              { transform: 'translate3d(0,0,0) rotateX(0) rotateY(0) rotateZ(0)', opacity: s.opacity },
+              { transform: `translate3d(${(Math.random()-0.5)*200}px, ${(h+500)*p.fallSpeed}px, ${Math.random()*500}px) rotateX(${(Math.random()-0.5)*360*p.rotationIntensity}deg) rotateY(${(Math.random()-0.5)*360*p.rotationIntensity}deg) rotateZ(${(Math.random()-0.5)*180*p.rotationIntensity}deg)`, opacity: 0 }
+            ], { duration: p.duration - delay, delay: delay, easing: 'cubic-bezier(0.5, 0, 1, 1)', fill: 'forwards' });
+          }
+        }
+      }
+    };
+
+    DOM.btnPlay.addEventListener('click', () => { EffectRunner.play(State, 'stage-bg', 'effect-overlay'); });
+
+    document.getElementById('btn-save-project').addEventListener('click', () => {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(State));
+      const a = document.createElement('a'); a.href = dataStr; a.download = "chromashift_ultimate_state.json"; a.click();
+    });
+
+    DOM.btnLoadJson.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const loadedState = JSON.parse(ev.target.result);
+        Object.assign(State, loadedState);
+        // Миграция старых файлов сохранений
+        if(!State.bgSettings && State.bgImage) {
+          State.bgSettings = { type: 'url', url: State.bgImage, opacity: 1, color: '#05050a', pattern: 'none' };
+        }
+        updateBgUI();
+        DOM.effectSelect.value = State.effect.type;
+        renderProperties();
+        EffectRunner.play(State, 'stage-bg', 'effect-overlay');
+      };
+      reader.readAsText(file);
+    });
+
+    function generateHTML() {
+      const htmlStr = `<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<style>
+  body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+  #container { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  #stage-bg { position: absolute; inset: 0; transform-origin: center; }
+  #effect-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+  @keyframes neonPulse { 0% { filter: drop-shadow(0 0 5px var(--neon-color)); } 50% { filter: drop-shadow(0 0 var(--neon-intensity) var(--neon-color)); } 100% { filter: drop-shadow(0 0 5px var(--neon-color)); } }
+  .effect-neon { animation: neonPulse 2s infinite ease-in-out; }
+</style>
+</head>
+<body>
+  <svg style="display:none;">
+    <defs>
+      <filter id="water-filter"><feTurbulence id="water-turb" type="fractalNoise" baseFrequency="0.01" numOctaves="2" result="turbulence"/><feDisplacementMap id="water-disp" in="SourceGraphic" in2="turbulence" scale="0" xChannelSelector="R" yChannelSelector="G"/></filter>
+      <filter id="portal-filter"><feTurbulence id="portal-turb" type="fractalNoise" baseFrequency="0.01" numOctaves="1" result="warp"/><feDisplacementMap id="portal-disp" in="SourceGraphic" in2="warp" scale="0" xChannelSelector="R" yChannelSelector="G"/></filter>
+    </defs>
+  </svg>
+  <div id="container">
+    <div id="stage-bg"></div>
+    <div id="effect-overlay"></div>
+  </div>
+  <script>
+    const State = ${JSON.stringify(State)};
+    const EffectRunner = { 
+      initBg: ${EffectRunner.initBg.toString()},
+      play: ${EffectRunner.play.toString()} 
+    };
+    
+    // Предварительно настраиваем фон до старта анимации (для прозрачности)
+    EffectRunner.initBg(State, 'stage-bg');
+    
+    let isPlayed = false;
+    function tryPlay() {
+      if(isPlayed) return;
+      const overlay = document.getElementById('effect-overlay');
+      
+      if(!overlay || overlay.clientWidth < 10 || overlay.clientHeight < 10) {
+        setTimeout(tryPlay, 50); 
+        return;
+      }
+      
+      isPlayed = true;
+      EffectRunner.play(State, 'stage-bg', 'effect-overlay');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if ('IntersectionObserver' in window) {
+        const obs = new IntersectionObserver((entries) => {
+          if (entries[0].isIntersecting) {
+            setTimeout(tryPlay, 200);
+            obs.disconnect();
+          }
+        }, { threshold: 0.05 });
+        obs.observe(document.body);
+      } else {
+        window.addEventListener('load', () => setTimeout(tryPlay, 500));
+      }
+      document.body.addEventListener('click', tryPlay);
+    });
+  <\/script>
+</body>
+</html>`;
+      return htmlStr;
+    }
+
+    DOM.btnExport.addEventListener('click', () => {
+      const htmlContent = generateHTML();
+      
+      // Скачивание HTML файла для локального использования
+      const blob = new Blob([htmlContent], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = "chromashift_transition.html"; a.click();
+      
+      // Создаем компактный base64 iframe
+      const base64Html = btoa(unescape(encodeURIComponent(htmlContent)));
+      DOM.exportResult.value = `<iframe src="data:text/html;base64,${base64Html}" style="width:100%; height:100%; min-height:450px; border:none; margin:0; padding:0; background:transparent;" scrolling="no" frameborder="0" allowtransparency="true" allow="autoplay; fullscreen" allowfullscreen="true" webkitallowfullscreen="true" mozallowfullscreen="true"></iframe>`;
+    });
+
+    // Инициализация при старте
+    updateBgUI();
+    EffectRunner.initBg(State, 'stage-bg');
+
+  </script>
+</body>
+</html>
