@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<style>
+  body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+  #container { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  #stage-bg { position: absolute; inset: 0; transform-origin: center; }
+  #effect-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+  @keyframes neonPulse { 0% { filter: drop-shadow(0 0 5px var(--neon-color)); } 50% { filter: drop-shadow(0 0 var(--neon-intensity) var(--neon-color)); } 100% { filter: drop-shadow(0 0 5px var(--neon-color)); } }
+  .effect-neon { animation: neonPulse 2s infinite ease-in-out; }
+</style>
+</head>
+<body>
+  <svg style="display:none;">
+    <defs>
+      <filter id="water-filter"><feTurbulence id="water-turb" type="fractalNoise" baseFrequency="0.01" numOctaves="2" result="turbulence"/><feDisplacementMap id="water-disp" in="SourceGraphic" in2="turbulence" scale="0" xChannelSelector="R" yChannelSelector="G"/></filter>
+      <filter id="portal-filter"><feTurbulence id="portal-turb" type="fractalNoise" baseFrequency="0.01" numOctaves="1" result="warp"/><feDisplacementMap id="portal-disp" in="SourceGraphic" in2="warp" scale="0" xChannelSelector="R" yChannelSelector="G"/></filter>
+      <filter id="crumple-filter"><feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="3" result="noise"/><feDisplacementMap in="SourceGraphic" in2="noise" scale="0" xChannelSelector="R" yChannelSelector="G" id="crumple-disp"/></filter>
+    </defs>
+  </svg>
+  <div id="container">
+    <div id="stage-bg"></div>
+    <div id="effect-overlay"></div>
+  </div>
+  <script>
+    const State = {"bgSettings":{"type":"url","url":"https://i.imgur.com/0mLMWPs.jpeg","color":"#05050a","pattern":"none","opacity":1},"effect":{"type":"water"},"params":{"water":{"intensity":100,"duration":3000}}};
+    const activeEffect = function(state, bg, overlay, p, s, w, h, bgStyleStr, setupCanvas) {
+          bg.style.filter = 'url(#water-filter)';
+          const turb = document.getElementById('water-turb'), disp = document.getElementById('water-disp');
+          let start = performance.now();
+          function anim(t) {
+            let prog = Math.min((t - start) / p.duration, 1);
+            if(turb) turb.setAttribute('baseFrequency', 0.01 + prog * 0.05);
+            if(disp) disp.setAttribute('scale', prog * p.intensity);
+            bg.style.opacity = s.opacity * (1 - prog);
+            if (prog < 1) requestAnimationFrame(anim);
+          }
+          requestAnimationFrame(anim);
+        };
+    const EffectRunner = { 
+      initBg: function(state, bgElementId) {
+        const bg = document.getElementById(bgElementId);
+        if(!bg) return;
+        const s = state.bgSettings;
+        bg.style.cssText = `position:absolute; inset:0; transform-origin:center; display:block; filter:none; transform:none; clip-path:none; mask:none; -webkit-mask:none;`;
+        bg.style.opacity = s.opacity;
+
+        if (s.type === 'url' && s.url) {
+          bg.style.backgroundImage = `url('${s.url}')`;
+          bg.style.backgroundSize = 'cover';
+          bg.style.backgroundPosition = 'center';
+          bg.style.backgroundColor = 'transparent';
+        } else if (s.type === 'color' || s.type === 'pattern') {
+          bg.style.backgroundColor = s.color;
+          bg.style.backgroundImage = 'none';
+          if (s.type === 'pattern') {
+            if (s.pattern === 'grid') {
+              bg.style.backgroundImage = `linear-gradient(rgba(255,255,255,0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.2) 1px, transparent 1px)`;
+              bg.style.backgroundSize = '20px 20px';
+            } else if (s.pattern === 'dots') {
+              bg.style.backgroundImage = `radial-gradient(rgba(255,255,255,0.3) 2px, transparent 2px)`;
+              bg.style.backgroundSize = '20px 20px';
+            } else if (s.pattern === 'stripes') {
+              bg.style.backgroundImage = `repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.1) 10px, rgba(255,255,255,0.1) 20px)`;
+            } else if (s.pattern === 'checkerboard') {
+               bg.style.backgroundImage = `linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%, rgba(255,255,255,0.1)), linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%, rgba(255,255,255,0.1))`;
+               bg.style.backgroundPosition = `0 0, 10px 10px`;
+               bg.style.backgroundSize = `20px 20px`;
+            }
+          }
+        }
+      },
+      play: function(state, bgElementId, overlayElementId) {
+        this.initBg(state, bgElementId);
+        const bg = document.getElementById(bgElementId);
+        const overlay = document.getElementById(overlayElementId);
+        const type = state.effect.type;
+        const p = state.params[type];
+        const s = state.bgSettings;
+        const w = overlay.clientWidth, h = overlay.clientHeight;
+        overlay.innerHTML = ''; overlay.style.perspective = 'none';
+        document.documentElement.style.setProperty('--neon-color', 'transparent');
+        document.documentElement.style.setProperty('--neon-intensity', '0px');
+        if (type === 'none' || (s.type === 'url' && !s.url)) return;
+        const bgStyleStr = "background-image: " + bg.style.backgroundImage + "; background-color: " + bg.style.backgroundColor + "; background-size: " + (bg.style.backgroundSize || 'cover') + "; background-position: " + (bg.style.backgroundPosition || 'center') + ";";
+        const setupCanvas = () => {
+          const cvs = document.createElement('canvas');
+          cvs.width = w; cvs.height = h;
+          cvs.style.cssText = "position:absolute; inset:0; pointer-events:none;";
+          overlay.appendChild(cvs);
+          return { cvs, ctx: cvs.getContext('2d') };
+        };
+        activeEffect(state, bg, overlay, p, s, w, h, bgStyleStr, setupCanvas);
+      }
+    };
+    
+    EffectRunner.initBg(State, 'stage-bg');
+    
+    let isPlayed = false;
+    function tryPlay() {
+      if(isPlayed) return;
+      const overlay = document.getElementById('effect-overlay');
+      if(!overlay || overlay.clientWidth < 10 || overlay.clientHeight < 10) {
+        setTimeout(tryPlay, 50); 
+        return;
+      }
+      isPlayed = true;
+      EffectRunner.play(State, 'stage-bg', 'effect-overlay');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if ('IntersectionObserver' in window) {
+        const obs = new IntersectionObserver((entries) => {
+          if (entries[0].isIntersecting) {
+            setTimeout(tryPlay, 200);
+            obs.disconnect();
+          }
+        }, { threshold: 0.05 });
+        obs.observe(document.body);
+      } else {
+        window.addEventListener('load', () => setTimeout(tryPlay, 500));
+      }
+      document.body.addEventListener('click', tryPlay);
+    });
+  </script>
+</body>
+</html>
